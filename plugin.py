@@ -27,34 +27,6 @@ isosx = sys.platform.startswith('darwin')
 islinux = sys.platform.startswith('linux')
 
 
-# get 'C:\Users\<User>\AppData\Local\' folder location
-def GetLocalAppData():
-    ''' returns the local AppData folder '''
-    # check for Windows 7 or higher
-    if sys.getwindowsversion().major >= 6:
-        return os.path.join(os.getenv('USERPROFILE'), 'AppData', 'Local')
-    else:
-        return os.path.join(os.getenv('USERPROFILE'), 'Local Settings', 'Application Data')
-
-
-def GetDesktop():
-    ''' returns the desktop/home folder '''
-    # output directory
-    home = expanduser('~')
-    desktop = os.path.join(home, 'Desktop')
-    if os.path.isdir(desktop):
-        return desktop
-    else:
-        return home
-
-
-# find kindlegen binary
-def findKindleGen():
-    ''' returns the KindleGen path '''
-    kg_path = shutil.which('kindlegen')
-    return kg_path
-
-
 # simple kindlegen wrapper
 def kgWrapper(*args):
     '''simple KindleGen wrapper '''
