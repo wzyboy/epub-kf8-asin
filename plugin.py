@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from __future__ import unicode_literals, division, absolute_import, print_function
 
 import sys
 import uuid
@@ -17,20 +16,13 @@ from datetime import datetime
 from PIL import Image
 import cssutils
 
-PY2 = sys.version_info[0] == 2
-if PY2:
-    from Tkinter import Tk, BOTH, StringVar, IntVar, BooleanVar, PhotoImage, DISABLED
-    from ttk import Frame, Button, Label, Entry, Checkbutton, Combobox
-    import tkFileDialog as tkinter_filedialog
-    import tkMessageBox as messagebox
-else:
-    from tkinter import Tk, BOTH, StringVar, IntVar, BooleanVar, PhotoImage, messagebox, DISABLED
-    from tkinter.ttk import Frame, Button, Label, Entry, Checkbutton, Combobox
-    import tkinter.filedialog as tkinter_filedialog
+from tkinter import Tk, BOTH, StringVar, IntVar, BooleanVar, PhotoImage, messagebox, DISABLED
+from tkinter.ttk import Frame, Button, Label, Entry, Checkbutton, Combobox
+import tkinter.filedialog as tkinter_filedialog
 
 # auxiliary KindleUnpack libraries for azw3/mobi splitting
-from dualmetafix_mmap import DualMobiMetaFix, pathof, iswindows  # NOQA
-from mobi_split import mobi_split  # NOQA
+from dualmetafix_mmap import DualMobiMetaFix, pathof, iswindows
+from mobi_split import mobi_split
 
 # for metadata parsing
 try:
@@ -39,7 +31,7 @@ except ImportError:
     from bs4 import BeautifulSoup
 
 # auxiliary tools
-from epub_utils import epub_zip_up_book_contents  # NOQA
+from epub_utils import epub_zip_up_book_contents
 
 # detect OS
 isosx = sys.platform.startswith('darwin')
@@ -721,7 +713,7 @@ def run(bk):
     # set Tk parameters for dialog box
     root = Tk()
     root.geometry("240x400+300+300")
-    if not PY2 and not isosx:
+    if not isosx:
         icon_img = PhotoImage(file=os.path.join(bk._w.plugin_dir, bk._w.plugin_name, 'sigil.png'))
         root.tk.call('wm', 'iconphoto', root._w, icon_img)
     root.mainloop()
