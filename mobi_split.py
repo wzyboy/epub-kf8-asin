@@ -8,7 +8,9 @@ import struct
 # note:  struct pack, unpack, unpack_from all require bytestring format
 # data all the way up to at least python 2.7.5, python 3 okay with bytestring
 
-from unipath import pathof
+#from unipath import pathof
+def pathof(s):
+    return s
 
 
 # important  pdb header offsets
