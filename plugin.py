@@ -8,7 +8,7 @@ import tempfile
 import os
 import os.path
 from os.path import expanduser
-from subprocess import Popen, PIPE
+import subprocess
 
 # auxiliary KindleUnpack libraries for azw3/mobi splitting
 from dualmetafix_mmap import DualMobiMetaFix, pathof
@@ -23,25 +23,6 @@ except ImportError:
 # detect OS
 isosx = sys.platform.startswith('darwin')
 islinux = sys.platform.startswith('linux')
-
-
-# simple kindlegen wrapper
-def kgWrapper(*args):
-    '''simple KindleGen wrapper '''
-    process = Popen(list(args), stdout=PIPE, stderr=PIPE)
-    ret = process.communicate()
-    return ret
-
-
-# reverts first last
-def LastFirst(author):
-    ''' reverses the name of the author '''
-    author_parts = author.split(' ')
-    if len(author_parts) >= 2:
-        LastFirst = author_parts[len(author_parts) - 1] + ', ' + " ".join(author_parts[0:len(author_parts) - 1])
-        return LastFirst
-    else:
-        return author
 
 
 # main plugin routine
@@ -82,9 +63,8 @@ def run(bk):
 
     # get author
     if metadata_soup.find('dc:creator') and metadata_soup.find('dc:creator').string is not None:
-        dc_creator = LastFirst(metadata_soup.find('dc:creator').string)
+        dc_creator = metadata_soup.find('dc:creator').string
         dc_creator = re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_creator)
-
     else:
         dc_creator = ''
 
@@ -141,19 +121,7 @@ def run(bk):
     print("Running KindleGen ... please wait")
     if debug:
         print('args:', args)
-    result = kgWrapper(*args)
-
-    # print kindlegen messages
-    kg_messages = result[0].decode('utf-8', 'ignore').replace(temp_dir, '').replace('\r\n', '\n')
-    print(kg_messages)
-
-    # display kindlegen warning messages
-    if re.search(r'W\d+:', kg_messages):
-        print('\n*************************************************************\nkindlegen warnings:\n*************************************************************')
-        kg_warnings = kg_messages.splitlines()
-        for line in kg_warnings:
-            if re.search(r'W\d+:', line):
-                print(line)
+    subprocess.check_call(args)
 
     #--------------------------------------
     # define output directory and filenames
@@ -165,10 +133,7 @@ def run(bk):
     dst_folder = desktop
 
     # make sure the output file name is safe
-    if dc_creator != '':
-        title = dc_creator + '-' + re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
-    else:
-        title = re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
+    title = re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
 
     # define file paths
     azw_path = os.path.join(dst_folder, title + '_' + asin + '.azw3')
