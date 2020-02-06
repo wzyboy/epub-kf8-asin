@@ -9,9 +9,7 @@ import os
 import os.path
 from os.path import expanduser
 from subprocess import Popen, PIPE
-from io import BytesIO
 import logging
-from PIL import Image
 import cssutils
 
 from tkinter import Tk, BOTH, StringVar, IntVar, BooleanVar, PhotoImage, messagebox, DISABLED
@@ -609,26 +607,6 @@ def run(bk):
                     cover_id = bk.href_to_id(cover_image_href.group(2).replace('../', ''))
                     plugin_warnings += '\n<meta name="cover" content="' + cover_id + '" />'
 
-    #------------------------------
-    # check minimum cover width
-    #------------------------------
-    img = None
-    if cover_id and os.path.splitext(bk.id_to_href(cover_id))[1][1:].upper() != 'SVG':
-        imgdata = bk.readfile(cover_id)
-        try:
-            img = Image.open(BytesIO(imgdata)).convert('L')
-            width, height = img.size
-            if width < 500:
-                plugin_warnings += '\nWarning: The cover is too small: ' + str(width) + ' x ' + str(height)
-            # check recommended dpi
-            if prefs['check_dpi']:
-                xdpi, ydpi = img.info['dpi']
-                if (int(xdpi) or int(ydpi)) < 300:
-                    plugin_warnings += '\nInfo: Amazon recommends 300 dpi cover images. Your image has: ' + str(int(xdpi)) + ' x ' + str(int(ydpi)) + ' dpi.'
-        except Exception as ex:
-            plugin_warnings += '\n*** PYTHON ERROR ***\nAn exception {0} occurred.\nArguments:\n{1!r}'.format(str(ex), ex.args)
-            pass
-
     #-------------------------------------------------------------------------------------------------------------
     # check for Type 1 CFF fonts; for more information see https://blog.typekit.com/2005/10/06/phasing_out_typ/
     #-------------------------------------------------------------------------------------------------------------
@@ -979,26 +957,6 @@ def run(bk):
 
         # delete temp folder
         shutil.rmtree(temp_dir)
-
-        #================================================
-        # generate mobi thumbnail image for eInk kindles
-        #================================================
-        if img and prefs['thumbnail']:
-            thumbnail_height = prefs['thumbnail_height']
-            img.thumbnail((thumbnail_height, thumbnail_height), Image.ANTIALIAS)
-            if prefs['add_asin']:
-                img_dest_path = os.path.join(dst_folder, 'thumbnail_' + asin + '_EBOK_portrait.jpg')
-            else:
-                if prefs['kfx'] and KFX_ASIN is not None:
-                    img_dest_path = os.path.join(dst_folder, 'thumbnail_' + KFX_ASIN + '_EBOK_portrait.jpg')
-                else:
-                    img_dest_path = os.path.join(dst_folder, 'thumbnail_EBOK_portrait.jpg')
-            img.save(img_dest_path)
-
-            if os.path.isfile(img_dest_path):
-                print('\nThumbnail copied to: ' + img_dest_path)
-            else:
-                print('\nPlugin Error: Thumbnail creation failed.')
 
     else:
         if Cancel:
