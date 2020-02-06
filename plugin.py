@@ -9,8 +9,6 @@ import os
 import os.path
 from os.path import expanduser
 from subprocess import Popen, PIPE
-import logging
-import cssutils
 
 # auxiliary KindleUnpack libraries for azw3/mobi splitting
 from dualmetafix_mmap import DualMobiMetaFix, pathof
@@ -49,8 +47,6 @@ def LastFirst(author):
 # main plugin routine
 def run(bk):
     ''' the main routine '''
-    # the epub temp folder
-    ebook_root = bk._w.ebook_root
 
     # get OEBPS path
     if bk.launcher_version() >= 20190927:
@@ -144,161 +140,6 @@ def run(bk):
         dc_identifier = metadata_soup.find(string=re.compile("urn:(mobi-asin|amazon)", re.IGNORECASE))
         if dc_identifier is not None:
             asin = dc_identifier.split(':')[2]
-
-    #========================================
-    # check guides/landmarks cover metadata
-    #=======================================
-
-    #----------------------
-    # get epub3 metadata
-    #----------------------
-
-    if epubversion.startswith("3"):
-
-        # look for nav.xhtml
-        opf_soup = BeautifulSoup(bk.get_opf(), 'lxml')
-        nav_item = opf_soup.find('item', {'properties': 'nav'})
-        if nav_item:
-            nav_href = nav_item['href']
-            nav_id = bk.href_to_id(nav_href)
-
-            # get landmarks from nav document
-            landmarks = {}
-            nav_soup = BeautifulSoup(bk.readfile(nav_id), 'html.parser')
-            nav_landmarks = nav_soup.find('nav', {'epub:type': 'landmarks'})
-            if nav_landmarks is not None:
-                for landmark in nav_landmarks.find_all('a', {'epub:type': re.compile('.*?')}):
-                    epub_type = landmark['epub:type']
-                    if 'href' in landmark.attrs:
-                        href = landmark['href']
-                        landmarks[epub_type] = href
-
-            # check for required landmarks items
-            if 'toc' not in landmarks:
-                plugin_warnings += '\nWarning: Missing TOC epub3 landmark: Use Add Semantics > Table of Contents to mark the TOC.'
-            else:
-
-                toc_def = os.path.basename(landmarks['toc'])
-            if 'bodymatter' not in landmarks:
-                if prefs['check_srl']:
-                    plugin_warnings += '\nWarning: Missing SRL epub3 landmark: Use Add Semantics > Bodymatter to mark the SRL.'
-            else:
-
-                srl_def = os.path.basename(landmarks['bodymatter'])
-        else:
-            plugin_warnings += '\nError: nav document not found!'
-
-        # look for cover image
-        cover_id = None
-        cover_item = opf_soup.find('item', {'properties': 'cover-image'})
-        if cover_item:
-            cover_href = cover_item['href']
-            cover_id = bk.href_to_id(cover_href)
-            cover_def = os.path.basename(cover_href)
-        else:
-            plugin_warnings += '\nWarning: Cover not specified (cover-image property missing).'
-
-            # look for cover page image references
-            if 'cover' in landmarks:
-                base_name = os.path.basename(landmarks['cover'].replace('../', '').split('#')[0])
-                cover_page_id = bk.basename_to_id(base_name)
-                cover_page_html = bk.readfile(cover_page_id)
-                cover_image_href = re.search(r'(href|src)="(\.\.\/Images\/[^"]+)"', cover_page_html)
-                if cover_image_href:
-                    cover_id = bk.href_to_id(cover_image_href.group(2).replace('../', ''))
-                    plugin_warnings += '\n"' + os.path.basename(cover_image_href.group(2)) + '" should have a cover-image property.\n'
-
-    #======================
-    # get epub2 metadata
-    #======================
-    else:
-        # get guide items
-        opf_guide_items = {}
-        for ref_type, title, href in bk.getguide():
-            opf_guide_items[ref_type] = href
-
-        #-----------------------------------
-        # check for required guide items
-        #----------------------------------
-        if 'toc' not in opf_guide_items:
-            plugin_warnings += '\nWarning: Missing TOC guide item. Use Add Semantics > Table of Contents to mark the TOC.'
-        else:
-
-            toc_def = os.path.basename(opf_guide_items['toc'])
-
-        if 'text' not in opf_guide_items:
-            if prefs['check_srl']:
-                plugin_warnings += '\nWarning: Missing SRL guide item. Use Add Semantics > Text to mark the SRL.'
-        else:
-
-            srl_def = os.path.basename(opf_guide_items['text'])
-
-        #----------------------------
-        # check for cover image
-        #----------------------------
-        cover_id = None
-        cover_image = metadata_soup.find('meta', {'name': 'cover'})
-        if cover_image:
-            cover_id = cover_image['content']
-            try:
-                cover_href = bk.id_to_href(cover_id)
-                cover_def = os.path.basename(cover_href)
-            except Exception:
-                plugin_warnings += '\nWarning: Unmanifested cover id: ' + cover_id
-        else:
-            plugin_warnings += '\nWarning: Cover not specified (cover metadata missing).'
-
-            # look for cover page image references
-            if 'cover' in opf_guide_items:
-                base_name = os.path.basename(opf_guide_items['cover'].replace('../', '').split('#')[0])
-                cover_page_id = bk.basename_to_id(base_name)
-                cover_page_html = bk.readfile(cover_page_id)
-                cover_image_href = re.search(r'(href|src)="(\.\.\/Images\/[^"]+)"', cover_page_html)
-                if cover_image_href:
-                    cover_id = bk.href_to_id(cover_image_href.group(2).replace('../', ''))
-                    plugin_warnings += '\n<meta name="cover" content="' + cover_id + '" />'
-
-    #-------------------------------------------------------------------------------------------------------------
-    # check for Type 1 CFF fonts; for more information see https://blog.typekit.com/2005/10/06/phasing_out_typ/
-    #-------------------------------------------------------------------------------------------------------------
-
-    # get all fonts
-    font_manifest_items = []
-    font_manifest_items = list(bk.font_iter())
-
-    # fonts aren't found by bk.font_iter() if they have the wrong mime type, e.g. 'application/octet-stream
-    if font_manifest_items == []:
-        for manifest_id, href, mime in bk.manifest_iter():
-            if href.endswith('tf'):
-                font_manifest_items.append((manifest_id, href, mime))
-
-    for manifest_id, href, mime in font_manifest_items:
-        if bk.launcher_version() >= 20190927:
-            font_path = os.path.join(ebook_root, bk.id_to_bookpath(manifest_id))
-        else:
-            font_path = os.path.join(ebook_root, OEBPS, href)
-        with open(font_path, 'rb') as f:
-            # CFF/Type 1 fonts start with b'OTTO'
-            magic_number = f.read(4)
-            if magic_number == b'OTTO':
-                plugin_warnings += '\nWarning: CFF/Type1 (Postscript) font found: ' + os.path.basename(href)
-                cff = True
-
-    #-------------------------------------
-    # check for unsupported CSS selectors
-    #-------------------------------------
-    for css_id, href in bk.css_iter():
-        css = bk.readfile(css_id)
-        cssutils.log.setLevel(logging.FATAL)
-        sheet = cssutils.parseString(css)
-        for rule in sheet:
-            if rule.type == rule.STYLE_RULE:
-                # find properties that start with max:
-                for property in rule.style:
-                    if property.name.startswith('max'):
-                        #plugin_warnings += '\nWarning: Unsupported CSS property "{}" found.\n'.format(property.name) + rule.cssText + '\n'
-                        #print('Warning: Unsupported CSS property "{}" found.'.format(property.name))
-                        pass
 
     #=================
     # main routine
