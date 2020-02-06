@@ -66,32 +66,6 @@ def run(bk):
     else:
         opf_path = os.path.join(temp_dir, OEBPS, 'content.opf')
 
-    plugin_warnings = ''
-    global toc_def
-    toc_def = None
-    global srl_def
-    srl_def = None
-    global cover_def
-    cover_def = None
-    global asin
-    asin = None
-    global cff
-    cff = False
-
-    # get prefs
-    prefs = bk.getPrefs()
-
-    # write new optional settings to prefs file
-    if 'check_srl' not in prefs:
-        prefs['check_srl'] = True
-        bk.savePrefs(prefs)
-    if 'save_cleaned_file' not in prefs:
-        prefs['save_cleaned_file'] = False
-        bk.savePrefs(prefs)
-    if 'check_dpi' not in prefs:
-        prefs['check_dpi'] = False
-        bk.savePrefs(prefs)
-
     # get epub version number
     if bk.launcher_version() >= 20160102:
         epubversion = bk.epub_version()
@@ -145,184 +119,97 @@ def run(bk):
     # main routine
     #=================
 
+    # get debug preference
+    debug = False
+
+    kg_path = shutil.which('kindlegen')
+
+    #------------------------------------------
+    # define kindlegen command line parameters
+    #------------------------------------------
+
+    # define temporary mobi file name
+    mobi_path = os.path.join(temp_dir, OEBPS, 'sigil.mobi')
+    args = [kg_path, opf_path]
+
+    args.append('-dont_append_source')
+    args.append('-verbose')
+    args.append('-o')
+    args.append('sigil.mobi')
+
+    # run kindlegen
+    print("Running KindleGen ... please wait")
+    if debug:
+        print('args:', args)
+    result = kgWrapper(*args)
+
+    # print kindlegen messages
+    kg_messages = result[0].decode('utf-8', 'ignore').replace(temp_dir, '').replace('\r\n', '\n')
+    print(kg_messages)
+
+    # display kindlegen warning messages
+    if re.search(r'W\d+:', kg_messages):
+        print('\n*************************************************************\nkindlegen warnings:\n*************************************************************')
+        kg_warnings = kg_messages.splitlines()
+        for line in kg_warnings:
+            if re.search(r'W\d+:', line):
+                print(line)
+
+    #--------------------------------------
+    # define output directory and filenames
+    #--------------------------------------
+
     # output directory
     home = expanduser('~')
     desktop = os.path.join(home, 'Desktop')
-    if os.path.isdir(prefs['mobi_dir']):
-        dst_folder = prefs['mobi_dir']
+    dst_folder = desktop
+
+    # make sure the output file name is safe
+    if dc_creator != '':
+        title = dc_creator + '-' + re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
     else:
-        if os.path.isdir(desktop):
-            dst_folder = desktop
-        else:
-            dst_folder = home
-        prefs['mobi_dir'] = dst_folder
+        title = re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
 
-        bk.savePrefs(prefs)
+    # define file paths
+    azw_path = os.path.join(dst_folder, title + '_' + asin + '.azw3')
 
-    # get debug preference
-    debug = prefs.get('debug', False)
+    #=================================================================
+    # generate kfx and/or split mobi file into azw3 and mobi7 parts
+    #=================================================================
 
-    if 'kg_path' in prefs:
-        kg_path = prefs['kg_path']
+    # if kindlegen didn't fail, there should be a .mobi file
+    assert os.path.isfile(mobi_path)
 
-        #----------------------------------
-        # display confirmation message box
-        #----------------------------------
-        if plugin_warnings != '':
-            plugin_warnings = '\n*************************************************************' + plugin_warnings + '\n*************************************************************\n'
-            print(plugin_warnings)
-            answer = input('Do you want to ignore warnings? (yes/no)')
-            if answer == 'no':
-                print('\nPlugin terminated by user.\n\nPlease click OK to close the Plugin Runner window.')
-                return -1
+    #------------------------------------------------------------------------
+    # add ASIN and set book type to EBOK using KevinH's dualmetafix_mmap.py
+    #------------------------------------------------------------------------
+    dmf = DualMobiMetaFix(mobi_path, asin)
+    open(pathof(mobi_path + '.tmp'), 'wb').write(dmf.getresult())
 
-        #------------------------------------------
-        # define kindlegen command line parameters
-        #------------------------------------------
+    # if DualMobiMetaFix didn't fail, there should be a .temp file
+    if os.path.isfile(str(mobi_path) + '.tmp'):
+        print('\nASIN: ' + asin + ' added')
 
-        # define temporary mobi file name
-        mobi_path = os.path.join(temp_dir, OEBPS, 'sigil.mobi')
-        args = [kg_path, opf_path]
-
-        if prefs['compression'] in ['0', '1', '2'] or [0, 1, 2]:
-            args.append('-c' + str(prefs['compression']))
-
-        if prefs['donotaddsource']:
-            args.append('-dont_append_source')
-
-        if prefs['verbose']:
-            args.append('-verbose')
-
-        if prefs['western']:
-            args.append('-western')
-
-        if prefs['gif']:
-            args.append('-gif')
-
-        if prefs['locale'] in ['en', 'de', 'fr', 'it', 'es', 'zh', 'ja', 'pt', 'ru']:
-            args.append('-locale')
-            args.append(prefs['locale'])
-
-        args.append('-o')
-        args.append('sigil.mobi')
-
-        # only run kindlegen to generate mobi, mobi7 and mobi8 files
-        if prefs['azw3_only'] or prefs['mobi7'] or (not prefs['azw3_only'] and not prefs['mobi7']):
-
-            # run kindlegen
-            print("Running KindleGen ... please wait")
-            if debug:
-                print('args:', args)
-            result = kgWrapper(*args)
-
-            # print kindlegen messages
-            kg_messages = result[0].decode('utf-8', 'ignore').replace(temp_dir, '').replace('\r\n', '\n')
-            print(kg_messages)
-
-            # display kindlegen warning messages
-            if re.search(r'W\d+:', kg_messages):
-                print('\n*************************************************************\nkindlegen warnings:\n*************************************************************')
-                kg_warnings = kg_messages.splitlines()
-                for line in kg_warnings:
-                    if re.search(r'W\d+:', line):
-                        print(line)
-
-        #--------------------------------------
-        # define output directory and filenames
-        #--------------------------------------
-
-        # output directory
-        home = expanduser('~')
-        desktop = os.path.join(home, 'Desktop')
-        if os.path.isdir(prefs['mobi_dir']):
-            dst_folder = prefs['mobi_dir']
-        else:
-            if os.path.isdir(desktop):
-                dst_folder = desktop
-            else:
-                dst_folder = home
-            prefs['mobi_dir'] = dst_folder
-
-            bk.savePrefs(prefs)
-
-        # make sure the output file name is safe
-        if dc_creator != '':
-            title = dc_creator + '-' + re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
-        else:
-            title = re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
-
-        # define file paths
-        if prefs['add_asin']:
-            dst_path = os.path.join(dst_folder, title + '_' + asin + '.mobi')
-            azw_path = os.path.join(dst_folder, title + '_' + asin + '.azw3')
-        else:
-            dst_path = os.path.join(dst_folder, title + '.mobi')
-            azw_path = os.path.join(dst_folder, title + '.azw3')
-
-        #=================================================================
-        # generate kfx and/or split mobi file into azw3 and mobi7 parts
-        #=================================================================
-
-        # if kindlegen didn't fail, there should be a .mobi file
-        if os.path.isfile(mobi_path):
-
-            #------------------------------------------------------------------------
-            # add ASIN and set book type to EBOK using KevinH's dualmetafix_mmap.py
-            #------------------------------------------------------------------------
-            if prefs['azw3_only'] or prefs['mobi7']:
-                if prefs['add_asin']:
-                    dmf = DualMobiMetaFix(mobi_path, asin)
-                    open(pathof(mobi_path + '.tmp'), 'wb').write(dmf.getresult())
-
-                    # if DualMobiMetaFix didn't fail, there should be a .temp file
-                    if os.path.isfile(str(mobi_path) + '.tmp'):
-                        print('\nASIN: ' + asin + ' added')
-
-                        # delete original file and rename temp file
-                        os.remove(str(mobi_path))
-                        os.rename(str(mobi_path) + '.tmp', str(mobi_path))
-                    else:
-                        print('\nASIN couldn\'t be added.')
-
-            #----------------------
-            # copy output files
-            #----------------------
-            if prefs['azw3_only'] or prefs['mobi7']:
-                mobisplit = mobi_split(pathof(mobi_path))
-
-                if mobisplit.combo:
-                    outmobi8 = pathof(azw_path)
-                    outmobi7 = outmobi8.replace('.azw3', '.mobi')
-                    if prefs['azw3_only']:
-                        open(outmobi8, 'wb').write(mobisplit.getResult8())
-                        print('AZW3 file copied to ' + azw_path)
-                    if prefs['mobi7']:
-                        open(outmobi7, 'wb').write(mobisplit.getResult7())
-                        print('MOBI7 file copied to ' + azw_path.replace('.azw3', '.mobi'))
-                else:
-                    print('\nPlugin Error: Invalid mobi file format.')
-
-            else:
-                shutil.copyfile(mobi_path, dst_path)
-                print('\nMobi file copied to ' + dst_path)
-
-        else:
-            if prefs['azw3_only'] or prefs['mobi7'] or (not prefs['azw3_only'] and not prefs['mobi7']):
-                #-----------------------------------
-                # display KindleGen error messages
-                #-----------------------------------
-                if re.search(r'E\d+:', kg_messages):
-                    print('\n*************************************************************\nkindlegen errors:\n*************************************************************')
-                    kg_errors = kg_messages.splitlines()
-                    for line in kg_errors:
-                        if re.search(r'E\d+:', line):
-                            print(line)
-
-        # delete temp folder
-        shutil.rmtree(temp_dir)
-
+        # delete original file and rename temp file
+        os.remove(str(mobi_path))
+        os.rename(str(mobi_path) + '.tmp', str(mobi_path))
     else:
-        print('\nPlugin Warning: Kindlegen path not selected or invalid.\nPlease re-run the plugin and select the Kindlegen binary.')
+        print('\nASIN couldn\'t be added.')
+
+    #----------------------
+    # copy output files
+    #----------------------
+    mobisplit = mobi_split(pathof(mobi_path))
+
+    if mobisplit.combo:
+        outmobi8 = pathof(azw_path)
+        open(outmobi8, 'wb').write(mobisplit.getResult8())
+        print('AZW3 file copied to ' + azw_path)
+    else:
+        print('\nPlugin Error: Invalid mobi file format.')
+
+    # delete temp folder
+    shutil.rmtree(temp_dir)
 
     print('\nPlease click OK to close the Plugin Runner window.')
 
