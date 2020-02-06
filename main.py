@@ -68,7 +68,7 @@ def convert(epub_path, kf8_path=None, asin=None):
 
     # Generate temp .mobi file
     mobi_tmp = os.path.join(temp_dir, f'{asin}.mobi')
-    kindlegen_cmd = ['kindlegen', epub_tmp, '-dont_sppend_source', '-o', mobi_tmp]
+    kindlegen_cmd = ['kindlegen', epub_tmp, '-dont_append_source']
     subprocess.check_call(kindlegen_cmd)
     assert os.path.isfile(mobi_tmp)
 
