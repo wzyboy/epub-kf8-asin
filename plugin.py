@@ -1,13 +1,11 @@
 #!/usr/bin/env python
 
+import os
+import re
 import sys
 import uuid
-import re
 import shutil
 import tempfile
-import os
-import os.path
-from os.path import expanduser
 import subprocess
 
 # auxiliary KindleUnpack libraries for azw3/mobi splitting
@@ -19,10 +17,6 @@ try:
     from sigil_bs4 import BeautifulSoup
 except ImportError:
     from bs4 import BeautifulSoup
-
-# detect OS
-isosx = sys.platform.startswith('darwin')
-islinux = sys.platform.startswith('linux')
 
 
 # main plugin routine
@@ -128,7 +122,7 @@ def run(bk):
     #--------------------------------------
 
     # output directory
-    home = expanduser('~')
+    home = os.path.expanduser('~')
     desktop = os.path.join(home, 'Desktop')
     dst_folder = desktop
 
