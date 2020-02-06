@@ -8,11 +8,9 @@ import tempfile
 import os
 import os.path
 from os.path import expanduser
-import codecs
 from subprocess import Popen, PIPE
 from io import BytesIO
 import logging
-from datetime import datetime
 from PIL import Image
 import cssutils
 
@@ -131,40 +129,6 @@ def findKindleGen():
         if not kg_path or not os.path.basename(kg_path).startswith('kindlegen'):
             kg_path = None
     return kg_path
-
-
-# find Kindle Previewer binary
-def findKindlePreviewer():
-    ''' returns the Kindle Previewer path '''
-    kp_path = None
-
-    if iswindows:
-        # "C:\Users\Olaf\AppData\Local\Amazon\Kindle Previewer 3\Kindle Previewer 3.exe"
-        default_windows_path = os.path.join(GetLocalAppData(), 'Amazon', 'Kindle Previewer 3', 'Kindle Previewer 3.exe')
-        if os.path.isfile(default_windows_path):
-            kp_path = default_windows_path
-        # "C:\Users\Olaf\AppData\Local\Amazon\Kindle Previewer 4\Kindle Previewer 4.exe" [*** for future versions ***]
-        default_windows_path2 = os.path.join(GetLocalAppData(), 'Amazon', 'Kindle Previewer 4', 'Kindle Previewer 4.exe')
-        if os.path.isfile(default_windows_path2):
-            kp_path = default_windows_path2
-
-    if isosx:
-        # /Applications/Kindle Previewer 3.app/Contents/MacOS/lib/kindlegen/fc/bin/kindlegen
-        default_osx_path = os.path.join('/Applications', 'Kindle Previewer 3.app', 'Contents', 'MacOS', 'Kindle Previewer 3')
-        if os.path.isfile(default_osx_path):
-            kp_path = default_osx_path
-        # /Applications/Kindle Previewer 4.app/Contents/MacOS/lib/kindlegen/fc/bin/kindlegen [*** for future versions ***]
-        default_osx_path2 = os.path.join('/Applications', 'Kindle Previewer 4.app', 'Contents', 'MacOS', 'Kindle Previewer 4')
-        if os.path.isfile(default_osx_path2):
-            kp_path = default_osx_path2
-
-        if kp_path:
-            ts = os.path.getctime(kp_path)
-            if not ts >= 1565585360:
-                kp_path = None
-                print('KP too old: ', datetime.fromtimestamp(ts).strftime("%A, %B %d, %Y %I:%M:%S"), ts)
-
-    return kp_path
 
 
 # simple kindlegen wrapper
@@ -454,9 +418,6 @@ def run(bk):
     else:
         opf_path = os.path.join(temp_dir, OEBPS, 'content.opf')
 
-    # get opf name
-    opf_name = os.path.basename(opf_path)
-
     # macOS calibre-debug location: /Applications/calibre.app/Contents/console.app/Contents/MacOS/calibre-debug
     mac_calibre_debug_path = os.path.join('/Applications', 'calibre.app', 'Contents', 'console.app', 'Contents', 'MacOS', 'calibre-debug')
 
@@ -738,125 +699,6 @@ def run(bk):
 
     # get debug preference
     debug = prefs.get('debug', False)
-
-    #========================
-    # create KPF file
-    #========================
-
-    # get kpf preference
-    kpf = prefs.get('kpf', False)
-
-    if kpf:
-
-        # get Kindle Previewer Path
-        kp_path = prefs.get('kp_path', None)
-        if not kp_path:
-            kp_path = findKindlePreviewer()
-            if kp_path:
-                prefs['kp_path'] = kp_path
-                bk.savePrefs(prefs)
-
-        # make sure kindle previewer was found
-        if kp_path and (Cancel is not True):
-
-            # assemble arguments
-            args = [kp_path, os.path.join(ebook_root, OEBPS), '-convert', '-output', dst_folder]
-
-            # run kindle previewer
-            print("Running Kindle Previewer [kpf mode] ... please wait\n")
-            if debug:
-                print('args:', args)
-            result = kgWrapper(*args)
-
-            # parse log file
-            log_file_path = os.path.join(dst_folder, 'Logs', opf_name.replace('.opf', '_log.csv'))
-            kpf_file_path = os.path.join(dst_folder, 'KPF', opf_name.replace('.opf', '.kpf'))
-            if os.path.isfile(log_file_path):
-
-                # remove BOM
-                with open(log_file_path, 'rb') as f:
-                    rawdata = f.read()
-                    if rawdata[:3] == codecs.BOM_UTF8:
-                        rawdata = rawdata[3:]
-                with open(log_file_path, 'wb') as f:
-                    f.write(rawdata)
-
-                import csv
-                with open(log_file_path) as csv_file:
-                    csv_reader = csv.reader(csv_file, delimiter=',', quotechar='"')
-                    for row in csv_reader:
-                        type = row[0]
-                        description = row[1]
-                        print('{}\t{}'.format(type, description))
-            else:
-                print('\nKPF log file not found!')
-
-            if os.path.isfile(kpf_file_path):
-                print('\nKPF file name:', kpf_file_path)
-
-                if prefs['kfx']:
-                    #----------------------------------
-                    # create KFX from KPF
-                    #----------------------------------
-
-                    # make sure the output file name is safe
-                    if dc_creator != '':
-                        title = dc_creator + '-' + re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
-                    else:
-                        title = re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
-
-                    if prefs['add_asin']:
-                        kfx_path = os.path.join(dst_folder, title + '_' + asin + '.kfx')
-                        if isosx:
-                            args = [mac_calibre_debug_path, '-r', 'KFX Output', '--', '-a', asin, kpf_file_path, kfx_path]
-                        else:
-                            args = ['calibre-debug', '-r', 'KFX Output', '--', '-a', asin, kpf_file_path, kfx_path]
-                    else:
-                        kfx_path = os.path.join(dst_folder, title + '.kfx')
-                        if isosx:
-                            args = [mac_calibre_debug_path, '-r', 'KFX Output', '--', kpf_file_path, kfx_path]
-                        else:
-                            args = ['calibre-debug', '-r', 'KFX Output', '--', kpf_file_path, kfx_path]
-
-                    # run Calibre & KFX Output plugin
-                    print("\nRunning Calibre KFX Output plugin [kpf mode] ... please wait\n")
-                    try:
-                        if debug:
-                            print('args:', args)
-                        result = kgWrapper(*args)
-                    except FileNotFoundError:
-                        print('calibre-debug not found!\nClick OK to close the window.')
-                        return -1
-
-                    # print Calibre messages
-                    calibre_messages = result[0].decode('utf-8', 'ignore')
-                    print(calibre_messages)
-
-                    # get the ASIN number generated by the KFX Plugin
-                    KFX_ASIN_MATCH = re.search('ASIN=([^,]+),', calibre_messages)
-                    if KFX_ASIN_MATCH is not None:
-                        KFX_ASIN = KFX_ASIN_MATCH.group(1)
-
-                    # if the KFX output plugin didn't fail, there should be a KFX file
-                    if os.path.isfile(kfx_path):
-                        if not prefs['add_asin']:
-                            kfx_with_asin = kfx_path.replace('.kfx', '_' + KFX_ASIN + '.kfx')
-                            os.rename(kfx_path, kfx_with_asin)
-                            print('KFX file copied to ' + kfx_with_asin)
-                        else:
-                            print('KFX file copied to ' + kfx_path)
-                    else:
-                        print('KFX file coudn\'t be generated.')
-
-            else:
-                print('KPF file not found!')
-
-            print('Done')
-
-        else:
-            print('Kindle Previewer binary not found or plugin canceled by user.')
-
-        return 0
 
     if 'kg_path' in prefs and not Cancel:
         kg_path = prefs['kg_path']
