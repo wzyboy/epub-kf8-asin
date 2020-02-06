@@ -2,183 +2,107 @@
 
 import os
 import re
-import sys
 import uuid
 import shutil
+import zipfile
 import tempfile
+import argparse
 import subprocess
 
-# auxiliary KindleUnpack libraries for azw3/mobi splitting
-from dualmetafix_mmap import DualMobiMetaFix, pathof
+from bs4 import BeautifulSoup
+
+from dualmetafix_mmap import DualMobiMetaFix
 from mobi_split import mobi_split
 
-# for metadata parsing
-try:
-    from sigil_bs4 import BeautifulSoup
-except ImportError:
-    from bs4 import BeautifulSoup
+
+class EPUB:
+
+    def __init__(self, filename):
+        with zipfile.ZipFile(filename, 'r') as zip:
+            container_xml = zip.read('META-INF/container.xml').decode()
+            container_soup = BeautifulSoup(container_xml, 'xml')
+            opf_path = container_soup.find('rootfile').get('full-path')
+            opf_xml = zip.read(opf_path).decode()
+        self.opf_soup = BeautifulSoup(opf_xml, 'xml')
+
+    @property
+    def author(self):
+        return self.opf_soup.find('dc:creator').string
+
+    @property
+    def title(self):
+        return self.opf_soup.find('dc:title').string
+
+    @property
+    def language(self):
+        return self.opf_soup.find('dc:language').string
+
+    @property
+    def identifier(self):
+        return self.opf_soup.find('dc:identifier').string
+
+    @property
+    def version(self):
+        return self.opf_soup.find('package')['version']
 
 
-# main plugin routine
-def run(bk):
-    ''' the main routine '''
+def convert(epub_path, kf8_path=None, asin=None):
 
-    # get OEBPS path
-    if bk.launcher_version() >= 20190927:
-        OEBPS = bk.get_startingdir(bk.get_opfbookpath())
-    else:
-        OEBPS = os.path.join('OEBPS')
+    epub = EPUB(epub_path)
 
-    # create temp folder
+    # ASIN
+    if not asin:
+        if epub.identifier:
+            if epub.identifier.startswith('urn:uuid:'):
+                asin = epub.identifier.split(':')[2]
+            elif re.match(r'[0-9A-Z]{9,}', epub.identifier.upper()):
+                asin = epub.identifier
+        else:
+            # Generate fake ASIN
+            asin = uuid.uuid4()
+
+    # Make a temp copy of the book
     temp_dir = tempfile.mkdtemp()
+    epub_tmp = os.path.join(temp_dir, f'{asin}.epub')
+    shutil.copy(epub_path, epub_tmp)
 
-    # copy book files
-    bk.copy_book_contents_to(temp_dir)
+    # Generate temp .mobi file
+    mobi_tmp = os.path.join(temp_dir, f'{asin}.mobi')
+    kindlegen_cmd = ['kindlegen', epub_tmp, '-dont_sppend_source', '-o', mobi_tmp]
+    subprocess.check_call(kindlegen_cmd)
+    assert os.path.isfile(mobi_tmp)
 
-    # get content.opf
-    if bk.launcher_version() >= 20190927:
-        opf_path = os.path.join(temp_dir, bk.get_opfbookpath())
-    else:
-        opf_path = os.path.join(temp_dir, OEBPS, 'content.opf')
+    # Fix metadata of temp .mobi file:
+    # - Add ASIN
+    # - Set type to EBOK
+    dmf = DualMobiMetaFix(mobi_tmp, asin)
+    with open(mobi_tmp, 'wb') as f:
+        f.write(dmf.getresult())
 
-    # get epub version number
-    if bk.launcher_version() >= 20160102:
-        epubversion = bk.epub_version()
-    else:
-        opf_contents = bk.get_opf()
-        epubversion = BeautifulSoup(opf_contents, 'lxml').find('package')['version']
+    # KF8 Output
+    if not kf8_path:
+        epub_dir = os.path.dirname(epub_path)
+        clean_title = re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', epub.title)
+        kf8_path = os.path.join(epub_dir, f'{asin}_{clean_title}.azw3')
 
-    # get metadata soup
-    metadata_soup = BeautifulSoup(bk.getmetadataxml(), 'lxml')
+    # Extract KF8 from temp .mobi file
+    mobisplit = mobi_split(mobi_tmp)
+    with open(kf8_path, 'wb') as f:
+        f.write(mobisplit.getResult8())
 
-    #-----------------------------------------------
-    # get required metadata items (title & language
-    #-----------------------------------------------
-
-    # get author
-    if metadata_soup.find('dc:creator') and metadata_soup.find('dc:creator').string is not None:
-        dc_creator = metadata_soup.find('dc:creator').string
-        dc_creator = re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_creator)
-    else:
-        dc_creator = ''
-
-    # get title
-    if metadata_soup.find('dc:title'):
-        dc_title = metadata_soup.find('dc:title').string
-    else:
-        print('\nError: Missing title metadata!\n\nPlease click OK to close the Plugin Runner window.')
-        return -1
-
-    # get language
-    if metadata_soup.find('dc:language'):
-        pass
-    else:
-        print('\nError: Missing language metadata!\n\nPlease click OK to close the Plugin Runner window.')
-        return -1
-
-    #---------------
-    # get/set asin
-    #--------------
-    asin = str(uuid.uuid4())[24:82]
-    if epubversion.startswith("2"):
-        dc_identifier = metadata_soup.find('dc:identifier', {'opf:scheme': re.compile('(MOBI-ASIN|AMAZON)', re.IGNORECASE)})
-        if dc_identifier is not None:
-            asin = dc_identifier.string
-    else:
-        dc_identifier = metadata_soup.find(string=re.compile("urn:(mobi-asin|amazon)", re.IGNORECASE))
-        if dc_identifier is not None:
-            asin = dc_identifier.split(':')[2]
-
-    #=================
-    # main routine
-    #=================
-
-    # get debug preference
-    debug = False
-
-    kg_path = shutil.which('kindlegen')
-
-    #------------------------------------------
-    # define kindlegen command line parameters
-    #------------------------------------------
-
-    # define temporary mobi file name
-    mobi_path = os.path.join(temp_dir, OEBPS, 'sigil.mobi')
-    args = [kg_path, opf_path]
-
-    args.append('-dont_append_source')
-    args.append('-verbose')
-    args.append('-o')
-    args.append('sigil.mobi')
-
-    # run kindlegen
-    print("Running KindleGen ... please wait")
-    if debug:
-        print('args:', args)
-    subprocess.check_call(args)
-
-    #--------------------------------------
-    # define output directory and filenames
-    #--------------------------------------
-
-    # output directory
-    home = os.path.expanduser('~')
-    desktop = os.path.join(home, 'Desktop')
-    dst_folder = desktop
-
-    # make sure the output file name is safe
-    title = re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
-
-    # define file paths
-    azw_path = os.path.join(dst_folder, title + '_' + asin + '.azw3')
-
-    #=================================================================
-    # generate kfx and/or split mobi file into azw3 and mobi7 parts
-    #=================================================================
-
-    # if kindlegen didn't fail, there should be a .mobi file
-    assert os.path.isfile(mobi_path)
-
-    #------------------------------------------------------------------------
-    # add ASIN and set book type to EBOK using KevinH's dualmetafix_mmap.py
-    #------------------------------------------------------------------------
-    dmf = DualMobiMetaFix(mobi_path, asin)
-    open(pathof(mobi_path + '.tmp'), 'wb').write(dmf.getresult())
-
-    # if DualMobiMetaFix didn't fail, there should be a .temp file
-    if os.path.isfile(str(mobi_path) + '.tmp'):
-        print('\nASIN: ' + asin + ' added')
-
-        # delete original file and rename temp file
-        os.remove(str(mobi_path))
-        os.rename(str(mobi_path) + '.tmp', str(mobi_path))
-    else:
-        print('\nASIN couldn\'t be added.')
-
-    #----------------------
-    # copy output files
-    #----------------------
-    mobisplit = mobi_split(pathof(mobi_path))
-
-    if mobisplit.combo:
-        outmobi8 = pathof(azw_path)
-        open(outmobi8, 'wb').write(mobisplit.getResult8())
-        print('AZW3 file copied to ' + azw_path)
-    else:
-        print('\nPlugin Error: Invalid mobi file format.')
-
-    # delete temp folder
+    # Clean up
     shutil.rmtree(temp_dir)
-
-    print('\nPlease click OK to close the Plugin Runner window.')
-
-    return 0
 
 
 def main():
-    print('I reached main when I should not have\n')
-    return -1
+    ap = argparse.ArgumentParser()
+    ap.add_argument('epub_path')
+    ap.add_argument('-o', '--output')
+    ap.add_argument('-a', '--asin')
+    args = ap.parse_args()
+
+    convert(args.epub_path, args.output, args.asin)
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
