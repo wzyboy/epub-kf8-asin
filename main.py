@@ -5,6 +5,7 @@ import re
 import uuid
 import shutil
 import zipfile
+import logging
 import tempfile
 import argparse
 import subprocess
@@ -13,6 +14,13 @@ from bs4 import BeautifulSoup
 
 from dualmetafix_mmap import DualMobiMetaFix
 from mobi_split import mobi_split
+
+
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__file__)
 
 
 class EPUB:
@@ -57,9 +65,11 @@ def convert(epub_path, kf8_path=None, asin=None):
                 asin = epub.identifier.split(':')[2]
             elif re.match(r'[0-9A-Z]{9,}', epub.identifier.upper()):
                 asin = epub.identifier
+            logger.info(f'Found a resonable ASIN: {asin}')
         else:
             # Generate fake ASIN
             asin = uuid.uuid4()
+            logger.info(f'Generated a fake ASIN: {asin}')
 
     # Make a temp copy of the book
     temp_dir = tempfile.mkdtemp()
@@ -75,6 +85,7 @@ def convert(epub_path, kf8_path=None, asin=None):
     # Fix metadata of temp .mobi file:
     # - Add ASIN
     # - Set type to EBOK
+    logger.info('Fixing metadata ...')
     dmf = DualMobiMetaFix(mobi_tmp, asin)
     with open(mobi_tmp, 'wb') as f:
         f.write(dmf.getresult())
@@ -86,19 +97,21 @@ def convert(epub_path, kf8_path=None, asin=None):
         kf8_path = os.path.join(epub_dir, f'{asin}_{clean_title}.azw3')
 
     # Extract KF8 from temp .mobi file
+    logger.info('Extracting KF8 ...')
     mobisplit = mobi_split(mobi_tmp)
     with open(kf8_path, 'wb') as f:
         f.write(mobisplit.getResult8())
 
     # Clean up
+    logger.info('Cleaning up ...')
     shutil.rmtree(temp_dir)
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('epub_path')
-    ap.add_argument('-o', '--output')
-    ap.add_argument('-a', '--asin')
+    ap.add_argument('-o', '--output', help='KF8 (.azw3) output')
+    ap.add_argument('-a', '--asin', help='provide/override ASIN')
     args = ap.parse_args()
 
     convert(args.epub_path, args.output, args.asin)
