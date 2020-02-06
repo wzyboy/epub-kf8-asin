@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 from __future__ import unicode_literals, division, absolute_import, print_function
 
-import sys, platform, uuid, re, shutil, tempfile
-import xml.etree.ElementTree as ET
+import sys
+import uuid
+import re
+import shutil
+import tempfile
 import os
 import os.path
-from os.path import expanduser, basename
-import subprocess, codecs
+from os.path import expanduser
+import codecs
 from subprocess import Popen, PIPE
-import lxml
 from io import BytesIO
 import logging
 from datetime import datetime
@@ -18,30 +20,31 @@ import cssutils
 PY2 = sys.version_info[0] == 2
 if PY2:
     from Tkinter import Tk, BOTH, StringVar, IntVar, BooleanVar, PhotoImage, DISABLED
-    from ttk import Frame, Button, Style, Label, Entry, Checkbutton, Combobox, Separator
+    from ttk import Frame, Button, Label, Entry, Checkbutton, Combobox
     import tkFileDialog as tkinter_filedialog
     import tkMessageBox as messagebox
 else:
     from tkinter import Tk, BOTH, StringVar, IntVar, BooleanVar, PhotoImage, messagebox, DISABLED
-    from tkinter.ttk import Frame, Button, Style, Label, Entry, Checkbutton, Combobox, Separator
+    from tkinter.ttk import Frame, Button, Label, Entry, Checkbutton, Combobox
     import tkinter.filedialog as tkinter_filedialog
 
 # auxiliary KindleUnpack libraries for azw3/mobi splitting
-from dualmetafix_mmap import DualMobiMetaFix, pathof, iswindows
-from mobi_split import mobi_split
+from dualmetafix_mmap import DualMobiMetaFix, pathof, iswindows  # NOQA
+from mobi_split import mobi_split  # NOQA
 
 # for metadata parsing
 try:
     from sigil_bs4 import BeautifulSoup
-except:
+except ImportError:
     from bs4 import BeautifulSoup
 
 # auxiliary tools
-from epub_utils import epub_zip_up_book_contents
+from epub_utils import epub_zip_up_book_contents  # NOQA
 
 # detect OS
 isosx = sys.platform.startswith('darwin')
 islinux = sys.platform.startswith('linux')
+
 
 # display kindlegen file selection dialog
 def GetFileName(title):
@@ -49,11 +52,13 @@ def GetFileName(title):
     file_path = tkinter_filedialog.askopenfilename(title=title)
     return file_path
 
+
 # display kindlegen file selection dialog
 def GetDir(title):
     ''' displayes a directory selection dialog box '''
     folder = tkinter_filedialog.askdirectory(title=title)
     return folder
+
 
 # display message box
 def AskYesNo(title, message):
@@ -62,6 +67,7 @@ def AskYesNo(title, message):
     root.withdraw()
     answer = messagebox.askquestion(title, message)
     return answer
+
 
 # get 'C:\Users\<User>\AppData\Local\' folder location
 def GetLocalAppData():
@@ -72,6 +78,7 @@ def GetLocalAppData():
     else:
         return os.path.join(os.getenv('USERPROFILE'), 'Local Settings', 'Application Data')
 
+
 def GetDesktop():
     ''' returns the desktop/home folder '''
     # output directory
@@ -81,6 +88,7 @@ def GetDesktop():
         return desktop
     else:
         return home
+
 
 # find kindlegen binary
 def findKindleGen():
@@ -132,6 +140,7 @@ def findKindleGen():
             kg_path = None
     return kg_path
 
+
 # find Kindle Previewer binary
 def findKindlePreviewer():
     ''' returns the Kindle Previewer path '''
@@ -165,12 +174,14 @@ def findKindlePreviewer():
 
     return kp_path
 
+
 # simple kindlegen wrapper
 def kgWrapper(*args):
     '''simple KindleGen wrapper '''
     process = Popen(list(args), stdout=PIPE, stderr=PIPE)
     ret = process.communicate()
     return ret
+
 
 # reverts first last
 def LastFirst(author):
@@ -181,6 +192,7 @@ def LastFirst(author):
         return LastFirst
     else:
         return author
+
 
 class Dialog(Frame):
     ''' the main GUI class '''
@@ -234,7 +246,7 @@ class Dialog(Frame):
         prefs = self.bk.getPrefs()
 
         # look for kindlegen binary
-        if not 'kg_path' in prefs:
+        if 'kg_path' not in prefs:
             kg_path = findKindleGen()
             if kg_path and os.path.basename(kg_path).startswith('kindlegen'):
                 prefs['kg_path'] = kg_path
@@ -248,7 +260,7 @@ class Dialog(Frame):
 
             srlLabel = Label(self, text="SRL: " + srl_def)
         else:
-            if 'check_srl' in prefs and prefs['check_srl'] == False:
+            if 'check_srl' in prefs and not prefs['check_srl']:
                 srlLabel = Label(self, foreground="blue", text="SRL: IGNORED")
             else:
                 srlLabel = Label(self, foreground="red", text="SRL: NOT FOUND")
@@ -276,7 +288,7 @@ class Dialog(Frame):
         asinLabel.place(x=10, y=70)
 
         # CFF/Type 1 (Postscript) font warning
-        if cff == True:
+        if cff:
             fontLabel = Label(self, foreground="red", text="CFF/Type 1")
             fontLabel.place(x=140, y=70)
 
@@ -425,6 +437,7 @@ class Dialog(Frame):
         okButton = Button(self, text="OK", command=self.savevalues)
         okButton.place(x=10, y=360)
 
+
 # main plugin routine
 def run(bk):
     ''' the main routine '''
@@ -511,9 +524,8 @@ def run(bk):
         return -1
 
     # get language
-    dc_language = 'en'
     if metadata_soup.find('dc:language'):
-        dc_language = metadata_soup.find('dc:language').string
+        pass
     else:
         print('\nError: Missing language metadata!\n\nPlease click OK to close the Plugin Runner window.')
         return -1
@@ -523,7 +535,7 @@ def run(bk):
     #--------------
     asin = str(uuid.uuid4())[24:82]
     if epubversion.startswith("2"):
-        dc_identifier = metadata_soup.find('dc:identifier', {'opf:scheme' : re.compile('(MOBI-ASIN|AMAZON)', re.IGNORECASE)})
+        dc_identifier = metadata_soup.find('dc:identifier', {'opf:scheme': re.compile('(MOBI-ASIN|AMAZON)', re.IGNORECASE)})
         if dc_identifier is not None:
             asin = dc_identifier.string
     else:
@@ -543,7 +555,7 @@ def run(bk):
 
         # look for nav.xhtml
         opf_soup = BeautifulSoup(bk.get_opf(), 'lxml')
-        nav_item = opf_soup.find('item', {'properties' : 'nav'})
+        nav_item = opf_soup.find('item', {'properties': 'nav'})
         if nav_item:
             nav_href = nav_item['href']
             nav_id = bk.href_to_id(nav_href)
@@ -551,22 +563,22 @@ def run(bk):
             # get landmarks from nav document
             landmarks = {}
             nav_soup = BeautifulSoup(bk.readfile(nav_id), 'html.parser')
-            nav_landmarks = nav_soup.find('nav', {'epub:type' : 'landmarks'})
+            nav_landmarks = nav_soup.find('nav', {'epub:type': 'landmarks'})
             if nav_landmarks is not None:
-                for landmark in nav_landmarks.find_all('a', {'epub:type' : re.compile('.*?')}):
+                for landmark in nav_landmarks.find_all('a', {'epub:type': re.compile('.*?')}):
                     epub_type = landmark['epub:type']
                     if 'href' in landmark.attrs:
                         href = landmark['href']
                         landmarks[epub_type] = href
 
             # check for required landmarks items
-            if not 'toc' in landmarks:
+            if 'toc' not in landmarks:
                 plugin_warnings += '\nWarning: Missing TOC epub3 landmark: Use Add Semantics > Table of Contents to mark the TOC.'
             else:
 
                 toc_def = os.path.basename(landmarks['toc'])
-            if not 'bodymatter' in landmarks:
-                if prefs['check_srl'] == True:
+            if 'bodymatter' not in landmarks:
+                if prefs['check_srl']:
                     plugin_warnings += '\nWarning: Missing SRL epub3 landmark: Use Add Semantics > Bodymatter to mark the SRL.'
             else:
 
@@ -576,7 +588,7 @@ def run(bk):
 
         # look for cover image
         cover_id = None
-        cover_item = opf_soup.find('item', {'properties' : 'cover-image'})
+        cover_item = opf_soup.find('item', {'properties': 'cover-image'})
         if cover_item:
             cover_href = cover_item['href']
             cover_id = bk.href_to_id(cover_href)
@@ -606,14 +618,14 @@ def run(bk):
         #-----------------------------------
         # check for required guide items
         #----------------------------------
-        if not 'toc' in opf_guide_items:
+        if 'toc' not in opf_guide_items:
             plugin_warnings += '\nWarning: Missing TOC guide item. Use Add Semantics > Table of Contents to mark the TOC.'
         else:
 
             toc_def = os.path.basename(opf_guide_items['toc'])
 
-        if not 'text' in opf_guide_items:
-            if prefs['check_srl'] == True:
+        if 'text' not in opf_guide_items:
+            if prefs['check_srl']:
                 plugin_warnings += '\nWarning: Missing SRL guide item. Use Add Semantics > Text to mark the SRL.'
         else:
 
@@ -623,13 +635,13 @@ def run(bk):
         # check for cover image
         #----------------------------
         cover_id = None
-        cover_image = metadata_soup.find('meta', {'name' : 'cover'})
+        cover_image = metadata_soup.find('meta', {'name': 'cover'})
         if cover_image:
             cover_id = cover_image['content']
             try:
                 cover_href = bk.id_to_href(cover_id)
                 cover_def = os.path.basename(cover_href)
-            except:
+            except Exception:
                 plugin_warnings += '\nWarning: Unmanifested cover id: ' + cover_id
         else:
             plugin_warnings += '\nWarning: Cover not specified (cover metadata missing).'
@@ -656,12 +668,12 @@ def run(bk):
             if width < 500:
                 plugin_warnings += '\nWarning: The cover is too small: ' + str(width) + ' x ' + str(height)
             # check recommended dpi
-            if prefs['check_dpi'] == True:
+            if prefs['check_dpi']:
                 xdpi, ydpi = img.info['dpi']
                 if (int(xdpi) or int(ydpi)) < 300:
                     plugin_warnings += '\nInfo: Amazon recommends 300 dpi cover images. Your image has: ' + str(int(xdpi)) + ' x ' + str(int(ydpi)) + ' dpi.'
         except Exception as ex:
-            plugin_warnings += '\n*** PYTHON ERROR ***\nAn exception of type {0} occurred.\nArguments:\n{1!r}'.format(type(ex).__name__, ex.args)
+            plugin_warnings += '\n*** PYTHON ERROR ***\nAn exception {0} occurred.\nArguments:\n{1!r}'.format(str(ex), ex.args)
             pass
 
     #-------------------------------------------------------------------------------------------------------------
@@ -679,7 +691,7 @@ def run(bk):
                 font_manifest_items.append((manifest_id, href, mime))
 
     for manifest_id, href, mime in font_manifest_items:
-        if  bk.launcher_version() >= 20190927:
+        if bk.launcher_version() >= 20190927:
             font_path = os.path.join(ebook_root, bk.id_to_bookpath(manifest_id))
         else:
             font_path = os.path.join(ebook_root, OEBPS, href)
@@ -709,7 +721,6 @@ def run(bk):
     # set Tk parameters for dialog box
     root = Tk()
     root.geometry("240x400+300+300")
-    app = Dialog(root, bk)
     if not PY2 and not isosx:
         icon_img = PhotoImage(file=os.path.join(bk._w.plugin_dir, bk._w.plugin_name, 'sigil.png'))
         root.tk.call('wm', 'iconphoto', root._w, icon_img)
@@ -722,7 +733,7 @@ def run(bk):
     # output directory
     home = expanduser('~')
     desktop = os.path.join(home, 'Desktop')
-    if os.path.isdir(prefs['mobi_dir']) == True:
+    if os.path.isdir(prefs['mobi_dir']):
         dst_folder = prefs['mobi_dir']
     else:
         if os.path.isdir(desktop):
@@ -754,14 +765,15 @@ def run(bk):
                 bk.savePrefs(prefs)
 
         # make sure kindle previewer was found
-        if kp_path and (not Cancel == True):
+        if kp_path and (Cancel is not True):
 
             # assemble arguments
             args = [kp_path, os.path.join(ebook_root, OEBPS), '-convert', '-output', dst_folder]
 
             # run kindle previewer
             print("Running Kindle Previewer [kpf mode] ... please wait\n")
-            if debug: print('args:', args)
+            if debug:
+                print('args:', args)
             result = kgWrapper(*args)
 
             # parse log file
@@ -789,11 +801,11 @@ def run(bk):
 
             if os.path.isfile(kpf_file_path):
                 print('\nKPF file name:', kpf_file_path)
-            
-                if prefs['kfx'] == True:
-                #----------------------------------
-                # create KFX from KPF
-                #----------------------------------
+
+                if prefs['kfx']:
+                    #----------------------------------
+                    # create KFX from KPF
+                    #----------------------------------
 
                     # make sure the output file name is safe
                     if dc_creator != '':
@@ -801,8 +813,8 @@ def run(bk):
                     else:
                         title = re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
 
-                    if prefs['add_asin'] == True:
-                        kfx_path = os.path.join(dst_folder, title  + '_' + asin + '.kfx')
+                    if prefs['add_asin']:
+                        kfx_path = os.path.join(dst_folder, title + '_' + asin + '.kfx')
                         if isosx:
                             args = [mac_calibre_debug_path, '-r', 'KFX Output', '--', '-a', asin, kpf_file_path, kfx_path]
                         else:
@@ -817,9 +829,10 @@ def run(bk):
                     # run Calibre & KFX Output plugin
                     print("\nRunning Calibre KFX Output plugin [kpf mode] ... please wait\n")
                     try:
-                        if debug: print('args:', args)
+                        if debug:
+                            print('args:', args)
                         result = kgWrapper(*args)
-                    except FileNotFoundError as not_found:
+                    except FileNotFoundError:
                         print('calibre-debug not found!\nClick OK to close the window.')
                         return -1
 
@@ -834,7 +847,7 @@ def run(bk):
 
                     # if the KFX output plugin didn't fail, there should be a KFX file
                     if os.path.isfile(kfx_path):
-                        if prefs['add_asin'] == False:
+                        if not prefs['add_asin']:
                             kfx_with_asin = kfx_path.replace('.kfx', '_' + KFX_ASIN + '.kfx')
                             os.rename(kfx_path, kfx_with_asin)
                             print('KFX file copied to ' + kfx_with_asin)
@@ -853,7 +866,7 @@ def run(bk):
 
         return 0
 
-    if 'kg_path' in prefs and not Cancel == True:
+    if 'kg_path' in prefs and not Cancel:
         kg_path = prefs['kg_path']
 
         #----------------------------------
@@ -878,16 +891,16 @@ def run(bk):
         if prefs['compression'] in ['0', '1', '2'] or [0, 1, 2]:
             args.append('-c' + str(prefs['compression']))
 
-        if prefs['donotaddsource'] == True and prefs['kfx'] == False:
+        if prefs['donotaddsource'] and not prefs['kfx']:
             args.append('-dont_append_source')
 
-        if prefs['verbose'] == True:
+        if prefs['verbose']:
             args.append('-verbose')
 
-        if prefs['western'] == True:
+        if prefs['western']:
             args.append('-western')
 
-        if prefs['gif'] == True:
+        if prefs['gif']:
             args.append('-gif')
 
         if prefs['locale'] in ['en', 'de', 'fr', 'it', 'es', 'zh', 'ja', 'pt', 'ru']:
@@ -898,11 +911,12 @@ def run(bk):
         args.append('sigil.mobi')
 
         # only run kindlegen to generate mobi, mobi7 and mobi8 files
-        if prefs['azw3_only'] == True or prefs['mobi7'] == True or (prefs['azw3_only'] == False and prefs['mobi7'] == False and prefs['kfx'] == False):
+        if prefs['azw3_only'] or prefs['mobi7'] or (not prefs['azw3_only'] and not prefs['mobi7'] and not prefs['kfx']):
 
             # run kindlegen
             print("Running KindleGen ... please wait")
-            if debug: print('args:', args)
+            if debug:
+                print('args:', args)
             result = kgWrapper(*args)
 
             # print kindlegen messages
@@ -924,7 +938,7 @@ def run(bk):
         # output directory
         home = expanduser('~')
         desktop = os.path.join(home, 'Desktop')
-        if os.path.isdir(prefs['mobi_dir']) == True:
+        if os.path.isdir(prefs['mobi_dir']):
             dst_folder = prefs['mobi_dir']
         else:
             if os.path.isdir(desktop):
@@ -942,12 +956,12 @@ def run(bk):
             title = re.sub(r'[/|\?|<|>|\\\\|:|\*|\||"|\^| ]+', '_', dc_title)
 
         # define file paths
-        if prefs['add_asin'] == True:
-            dst_path = os.path.join(dst_folder, title  + '_' + asin + '.mobi')
-            azw_path = os.path.join(dst_folder, title  + '_' + asin + '.azw3')
-            kfx_path = os.path.join(dst_folder, title  + '_' + asin + '.kfx')
+        if prefs['add_asin']:
+            dst_path = os.path.join(dst_folder, title + '_' + asin + '.mobi')
+            azw_path = os.path.join(dst_folder, title + '_' + asin + '.azw3')
+            kfx_path = os.path.join(dst_folder, title + '_' + asin + '.kfx')
         else:
-            dst_path = os.path.join(dst_folder, title  + '.mobi')
+            dst_path = os.path.join(dst_folder, title + '.mobi')
             azw_path = os.path.join(dst_folder, title + '.azw3')
             kfx_path = os.path.join(dst_folder, title + '.kfx')
 
@@ -963,8 +977,8 @@ def run(bk):
             #--------------------------------------------------------------------
             # generate KFX file from Kindlegen-generated MOBI
             #--------------------------------------------------------------------
-            if prefs['kfx'] == True:
-                if prefs['add_asin'] == True:
+            if prefs['kfx']:
+                if prefs['add_asin']:
                     if isosx:
                         args = [mac_calibre_debug_path, '-r', 'KFX Output', '--', '-a', asin, '-e', '-p', '0', mobi_path, kfx_path]
                     else:
@@ -978,9 +992,10 @@ def run(bk):
                 # run Calibre & KFX Output plugin
                 print("\nRunning Calibre KFX Output plugin [mobi mode] ... please wait\n")
                 try:
-                    if debug: print('args:', args)
+                    if debug:
+                        print('args:', args)
                     result = kgWrapper(*args)
-                except FileNotFoundError as not_found:
+                except FileNotFoundError:
                     print('calibre-debug not found!\nClick OK to close the window.')
                     return -1
 
@@ -995,7 +1010,7 @@ def run(bk):
 
                 # if the KFX output plugin didn't fail, there should be a KFX file
                 if os.path.isfile(kfx_path):
-                    if prefs['add_asin'] == False:
+                    if not prefs['add_asin']:
                         kfx_with_asin = kfx_path.replace('.kfx', '_' + KFX_ASIN + '.kfx')
                         os.rename(kfx_path, kfx_with_asin)
                         print('KFX file copied to ' + kfx_with_asin)
@@ -1007,8 +1022,8 @@ def run(bk):
             #------------------------------------------------------------------------
             # add ASIN and set book type to EBOK using KevinH's dualmetafix_mmap.py
             #------------------------------------------------------------------------
-            if prefs['azw3_only'] == True or prefs['mobi7'] == True:
-                if prefs['add_asin'] == True:
+            if prefs['azw3_only'] or prefs['mobi7']:
+                if prefs['add_asin']:
                     dmf = DualMobiMetaFix(mobi_path, asin)
                     open(pathof(mobi_path + '.tmp'), 'wb').write(dmf.getresult())
 
@@ -1025,28 +1040,28 @@ def run(bk):
             #----------------------
             # copy output files
             #----------------------
-            if prefs['azw3_only'] == True or prefs['mobi7'] == True:
+            if prefs['azw3_only'] or prefs['mobi7']:
                 mobisplit = mobi_split(pathof(mobi_path))
 
                 if mobisplit.combo:
                     outmobi8 = pathof(azw_path)
                     outmobi7 = outmobi8.replace('.azw3', '.mobi')
-                    if prefs['azw3_only'] == True:
+                    if prefs['azw3_only']:
                         open(outmobi8, 'wb').write(mobisplit.getResult8())
                         print('AZW3 file copied to ' + azw_path)
-                    if prefs['mobi7'] == True:
+                    if prefs['mobi7']:
                         open(outmobi7, 'wb').write(mobisplit.getResult7())
                         print('MOBI7 file copied to ' + azw_path.replace('.azw3', '.mobi'))
                 else:
                     print('\nPlugin Error: Invalid mobi file format.')
 
             else:
-                if prefs['kfx'] == False:
+                if not prefs['kfx']:
                     shutil.copyfile(mobi_path, dst_path)
                     print('\nMobi file copied to ' + dst_path)
 
         else:
-            if prefs['azw3_only'] == True or prefs['mobi7'] == True or (prefs['azw3_only'] == False and prefs['mobi7'] == False and prefs['kfx'] == False):
+            if prefs['azw3_only'] or prefs['mobi7'] or (not prefs['azw3_only'] and not prefs['mobi7'] and not prefs['kfx']):
                 #-----------------------------------
                 # display KindleGen error messages
                 #-----------------------------------
@@ -1073,7 +1088,7 @@ def run(bk):
                 epub_zip_up_book_contents(temp_dir, epub_path)
 
                 # assemble command line parameters
-                if prefs['add_asin'] == True:
+                if prefs['add_asin']:
                     if isosx:
                         args = [mac_calibre_debug_path, '-r', 'KFX Output', '--', '-a', asin, '-e', '-p', '0', epub_path, kfx_path]
                     else:
@@ -1085,15 +1100,16 @@ def run(bk):
                         args = ['calibre-debug', '-r', 'KFX Output', '--', '-e', '-p', '0', epub_path, kfx_path]
 
                 # save cleaned file
-                if prefs['save_cleaned_file'] == True:
+                if prefs['save_cleaned_file']:
                     args.insert(4, '-c')
 
                 # run Calibre & KFX Output plugin
                 print("\nRunning Calibre KFX Output plugin [epub mode]... please wait\n")
                 try:
-                    if debug: print('args:', args)
+                    if debug:
+                        print('args:', args)
                     result = kgWrapper(*args)
-                except FileNotFoundError as not_found:
+                except FileNotFoundError:
                     print('calibre-debug not found!\nClick OK to close the window.')
                     return -1
 
@@ -1108,7 +1124,7 @@ def run(bk):
 
                 # if the plugin didn't fail there should be a kfx file
                 if os.path.isfile(kfx_path):
-                    if prefs['add_asin'] == False:
+                    if not prefs['add_asin']:
                         kfx_with_asin = kfx_path.replace('.kfx', '_' + KFX_ASIN + '.kfx')
                         os.rename(kfx_path, kfx_with_asin)
                         print('KFX file copied to ' + kfx_with_asin)
@@ -1118,7 +1134,7 @@ def run(bk):
                     print('KFX file coudn\'t be generated.')
 
                 # if the plugin didn't fail there should be a cleaned epub file
-                if prefs['save_cleaned_file'] == True:
+                if prefs['save_cleaned_file']:
                     if os.path.isfile(cleaned_epub_path):
                         print('Cleaned epub file copied to ' + cleaned_epub_path)
                     else:
@@ -1133,13 +1149,13 @@ def run(bk):
         #================================================
         # generate mobi thumbnail image for eInk kindles
         #================================================
-        if img and prefs['thumbnail'] == True:
+        if img and prefs['thumbnail']:
             thumbnail_height = prefs['thumbnail_height']
             img.thumbnail((thumbnail_height, thumbnail_height), Image.ANTIALIAS)
-            if prefs['add_asin'] == True:
+            if prefs['add_asin']:
                 img_dest_path = os.path.join(dst_folder, 'thumbnail_' + asin + '_EBOK_portrait.jpg')
             else:
-                if prefs['kfx'] == True and KFX_ASIN is not None:
+                if prefs['kfx'] and KFX_ASIN is not None:
                     img_dest_path = os.path.join(dst_folder, 'thumbnail_' + KFX_ASIN + '_EBOK_portrait.jpg')
                 else:
                     img_dest_path = os.path.join(dst_folder, 'thumbnail_EBOK_portrait.jpg')
@@ -1151,7 +1167,7 @@ def run(bk):
                 print('\nPlugin Error: Thumbnail creation failed.')
 
     else:
-        if Cancel == True:
+        if Cancel:
             print('\nPlugin terminated by user.')
         else:
             print('\nPlugin Warning: Kindlegen path not selected or invalid.\nPlease re-run the plugin and select the Kindlegen binary.')
@@ -1160,9 +1176,11 @@ def run(bk):
 
     return 0
 
+
 def main():
     print('I reached main when I should not have\n')
     return -1
+
 
 if __name__ == "__main__":
     sys.exit(main())
