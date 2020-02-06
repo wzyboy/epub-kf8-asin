@@ -12,12 +12,8 @@ from subprocess import Popen, PIPE
 import logging
 import cssutils
 
-from tkinter import Tk, BOTH, StringVar, IntVar, BooleanVar, PhotoImage, messagebox, DISABLED
-from tkinter.ttk import Frame, Button, Label, Entry, Checkbutton, Combobox
-import tkinter.filedialog as tkinter_filedialog
-
 # auxiliary KindleUnpack libraries for azw3/mobi splitting
-from dualmetafix_mmap import DualMobiMetaFix, pathof, iswindows
+from dualmetafix_mmap import DualMobiMetaFix, pathof
 from mobi_split import mobi_split
 
 # for metadata parsing
@@ -32,29 +28,6 @@ from epub_utils import epub_zip_up_book_contents
 # detect OS
 isosx = sys.platform.startswith('darwin')
 islinux = sys.platform.startswith('linux')
-
-
-# display kindlegen file selection dialog
-def GetFileName(title):
-    ''' displays a file selection dialog box '''
-    file_path = tkinter_filedialog.askopenfilename(title=title)
-    return file_path
-
-
-# display kindlegen file selection dialog
-def GetDir(title):
-    ''' displayes a directory selection dialog box '''
-    folder = tkinter_filedialog.askdirectory(title=title)
-    return folder
-
-
-# display message box
-def AskYesNo(title, message):
-    ''' displays a confirmation message box '''
-    root = Tk()
-    root.withdraw()
-    answer = messagebox.askquestion(title, message)
-    return answer
 
 
 # get 'C:\Users\<User>\AppData\Local\' folder location
@@ -81,51 +54,7 @@ def GetDesktop():
 # find kindlegen binary
 def findKindleGen():
     ''' returns the KindleGen path '''
-    kg_path = None
-
-    if iswindows:
-        # C:\Users\<User>\AppData\Local\Amazon\Kindle Previewer\lib\kindlegen.exe
-        default_windows_path = os.path.join(GetLocalAppData(), 'Amazon', 'Kindle Previewer', 'lib', 'kindlegen.exe')
-        if os.path.isfile(default_windows_path):
-            kg_path = default_windows_path
-        # C:\Users\<User>\AppData\Local\Amazon\Kindle Previewer 3\lib\fc\bin\kindlegen.exe
-        default_windows_path2 = os.path.join(GetLocalAppData(), 'Amazon', 'Kindle Previewer 3', 'lib', 'fc', 'bin', 'kindlegen.exe')
-        if os.path.isfile(default_windows_path2):
-            kg_path = default_windows_path2
-        # C:\Users\<User>\AppData\Local\Amazon\Kindle Previewer 4\lib\fc\bin\kindlegen.exe [*** for future versions ***]
-        default_windows_path3 = os.path.join(GetLocalAppData(), 'Amazon', 'Kindle Previewer 4', 'lib', 'fc', 'bin', 'kindlegen.exe')
-        if os.path.isfile(default_windows_path3):
-            kg_path = default_windows_path3
-
-    if islinux:
-        # /usr/local/bin/kindlegen
-        default_linux_path = os.path.join('/usr', 'local', 'bin', 'kindlegen')
-        if os.path.isfile(default_linux_path):
-            kg_path = default_linux_path
-        # ~/bin/kindlegen
-        default_linux_path2 = os.path.join(expanduser('~'), 'bin', 'kindlegen')
-        if os.path.isfile(default_linux_path2):
-            kg_path = default_linux_path2
-
-    if isosx:
-        # /Applications/Kindle Previewer.app/Contents/MacOS/lib/kindlegen
-        default_osx_path = os.path.join('/Applications', 'Kindle Previewer.app', 'Contents', 'MacOS', 'lib', 'kindlegen')
-        if os.path.isfile(default_osx_path):
-            kg_path = default_osx_path
-        # /Applications/Kindle Previewer 3.app/Contents/MacOS/lib/kindlegen/fc/bin/kindlegen
-        default_osx_path2 = os.path.join('/Applications', 'Kindle Previewer 3.app', 'Contents', 'MacOS', 'lib', 'fc', 'bin', 'kindlegen')
-        if os.path.isfile(default_osx_path2):
-            kg_path = default_osx_path2
-        # /Applications/Kindle Previewer 4.app/Contents/MacOS/lib/kindlegen/fc/bin/kindlegen [*** for future versions ***]
-        default_osx_path3 = os.path.join('/Applications', 'Kindle Previewer 4.app', 'Contents', 'MacOS', 'lib', 'fc', 'bin', 'kindlegen')
-        if os.path.isfile(default_osx_path3):
-            kg_path = default_osx_path3
-
-    # display select file dialog box
-    if not kg_path:
-        kg_path = GetFileName('Select kindlegen executable')
-        if not kg_path or not os.path.basename(kg_path).startswith('kindlegen'):
-            kg_path = None
+    kg_path = shutil.which('kindlegen')
     return kg_path
 
 
@@ -146,250 +75,6 @@ def LastFirst(author):
         return LastFirst
     else:
         return author
-
-
-class Dialog(Frame):
-    ''' the main GUI class '''
-    global Cancel
-    Cancel = True
-
-    def __init__(self, parent, bk):
-        # display the dialog box
-        Frame.__init__(self, parent)
-
-        self.parent = parent
-        self.bk = bk
-        self.initUI()
-
-    def savevalues(self):
-        global Cancel
-        Cancel = False
-
-        # save dialog box values in dictionary
-        prefs = self.bk.getPrefs()
-        prefs['donotaddsource'] = self.donotaddsource.get()
-        prefs['compression'] = self.compression.get()
-        prefs['verbose'] = self.verbose.get()
-        prefs['western'] = self.western.get()
-        prefs['gif'] = self.gif.get()
-        prefs['locale'] = self.locale.get()
-        prefs['add_asin'] = self.add_asin.get()
-        prefs['azw3_only'] = self.azw3_only.get()
-        prefs['mobi7'] = self.mobi7.get()
-        prefs['kpf'] = self.kpf.get()
-        prefs['kfx'] = self.kfx.get()
-        prefs['thumbnail'] = self.thumbnail.get()
-        prefs['mobi_dir'] = self.mobi_dir.get()
-        prefs['thumbnail_height'] = self.thumbnail_height.get()
-        self.bk.savePrefs(prefs)
-        self.master.destroy()
-        self.master.quit()
-
-    def cancel(self):
-        #self.master.destroy()
-        self.master.quit()
-
-    def getdir(self):
-        mobi_dir = GetDir('Select output folder.')
-        if mobi_dir != '':
-            self.mobi_dir.set(mobi_dir)
-        else:
-            self.mobi_dir.set(GetDesktop())
-
-    def initUI(self):
-        prefs = self.bk.getPrefs()
-
-        # look for kindlegen binary
-        if 'kg_path' not in prefs:
-            kg_path = findKindleGen()
-            if kg_path and os.path.basename(kg_path).startswith('kindlegen'):
-                prefs['kg_path'] = kg_path
-
-        # define dialog box properties
-        self.parent.title("KindleGen")
-        self.pack(fill=BOTH, expand=1)
-
-        # start reading location
-        if srl_def:
-
-            srlLabel = Label(self, text="SRL: " + srl_def)
-        else:
-            if 'check_srl' in prefs and not prefs['check_srl']:
-                srlLabel = Label(self, foreground="blue", text="SRL: IGNORED")
-            else:
-                srlLabel = Label(self, foreground="red", text="SRL: NOT FOUND")
-        srlLabel.place(x=10, y=10)
-
-        # HTML TOC
-        if toc_def:
-            tocLabel = Label(self, text="TOC: " + toc_def)
-        else:
-            tocLabel = Label(self, foreground="red", text="TOC: NOT FOUND")
-        tocLabel.place(x=10, y=30)
-
-        # Cover
-        if cover_def:
-            coverLabel = Label(self, text="Cover: " + cover_def)
-        else:
-            coverLabel = Label(self, foreground="red", text="Cover: NOT FOUND")
-        coverLabel.place(x=10, y=50)
-
-        # ASIN
-        if asin:
-            asinLabel = Label(self, text="ASIN: " + asin)
-        else:
-            asinLabel = Label(self, foreground="red", text="ASIN: NOT FOUND")
-        asinLabel.place(x=10, y=70)
-
-        # CFF/Type 1 (Postscript) font warning
-        if cff:
-            fontLabel = Label(self, foreground="red", text="CFF/Type 1")
-            fontLabel.place(x=140, y=70)
-
-        # Don't add source check button
-        self.donotaddsource = BooleanVar(None)
-        if 'donotaddsource' in prefs:
-            self.donotaddsource.set(prefs['donotaddsource'])
-        donotaddsourceCheckbutton = Checkbutton(self, text="Don't add source files", variable=self.donotaddsource)
-        donotaddsourceCheckbutton.place(x=10, y=90)
-
-        # compression label
-        options = ['0', '1', '2']
-        compressionLabel = Label(self, text="Compression: ")
-        compressionLabel.place(x=10, y=110)
-        # compression list box
-        self.compression = StringVar()
-        compression = Combobox(self, textvariable=self.compression)
-        compression['values'] = options
-        if 'compression' in prefs:
-            compression.current(int(prefs['compression']))
-        else:
-            compression.current(0)
-        compression.place(x=100, y=110, width=40, height=18)
-
-        # Verbose output check button
-        self.verbose = BooleanVar(None)
-        if 'verbose' in prefs:
-            self.verbose.set(prefs['verbose'])
-        verboseCheckbutton = Checkbutton(self, text="Verbose output", variable=self.verbose)
-        verboseCheckbutton.place(x=10, y=130)
-
-        # Western check button check button
-        self.western = BooleanVar(None)
-        if 'western' in prefs:
-            self.western.set(prefs['western'])
-        westernCheckbutton = Checkbutton(self, text="Western (Windows-1252)", variable=self.western)
-        westernCheckbutton.place(x=10, y=150)
-
-        # Gif to jpeg check button
-        self.gif = BooleanVar(None)
-        if 'gif' in prefs:
-            self.gif.set(prefs['gif'])
-        gifCheckbutton = Checkbutton(self, text="Convert JPEG to GIF", variable=self.gif)
-        gifCheckbutton.place(x=10, y=170)
-
-        # Select locale list box
-        locales = ['en', 'de', 'fr', 'it', 'es', 'zh', 'ja', 'pt', 'ru']
-        localeLabel = Label(self, text="Language: ")
-        localeLabel.place(x=10, y=190)
-        # locale list box
-        self.locale = StringVar()
-        locale = Combobox(self, textvariable=self.locale)
-        locale['values'] = locales
-        if 'locale' in prefs:
-            index = [i for i, x in enumerate(locales) if x == prefs['locale']]
-            locale.current(int(index[0]))
-        else:
-            locale.current(0)
-        locale.place(x=100, y=190, width=40, height=18)
-
-        # Add ASIN check button
-        self.add_asin = BooleanVar(None)
-        if 'add_asin' in prefs:
-            self.add_asin.set(prefs['add_asin'])
-        add_asinCheckbutton = Checkbutton(self, text="Add fake ASIN", variable=self.add_asin)
-        add_asinCheckbutton.place(x=10, y=210)
-
-        # Generate azw3 check button
-        self.azw3_only = BooleanVar(None)
-        if 'azw3_only' in prefs:
-            self.azw3_only.set(prefs['azw3_only'])
-        azw3_onlyCheckbutton = Checkbutton(self, text="Generate AZW3", variable=self.azw3_only)
-        azw3_onlyCheckbutton.place(x=10, y=230)
-
-        # Generate mobi7 check button
-        self.mobi7 = BooleanVar(None)
-        if 'mobi7' in prefs:
-            self.mobi7.set(prefs['mobi7'])
-        mobi7Checkbutton = Checkbutton(self, text="Generate Mobi7", variable=self.mobi7)
-        mobi7Checkbutton.place(x=10, y=250)
-
-        # Generate kpf check button
-        self.kpf = BooleanVar(None)
-        if 'kpf' in prefs:
-            self.kpf.set(prefs['kpf'])
-        kpfCheckbutton = Checkbutton(self, text="Generate KPF", variable=self.kpf)
-        kpfCheckbutton.place(x=10, y=270)
-        # there's no Kindle Previewer for Linux
-        if islinux:
-            self.kpf = BooleanVar(None)
-            kpfCheckbutton.config(state=DISABLED)
-
-        # Generate kfx check button
-        self.kfx = BooleanVar(None)
-        if 'kfx' in prefs:
-            self.kfx.set(prefs['kfx'])
-        kfxCheckbutton = Checkbutton(self, text="Generate KFX", variable=self.kfx)
-        kfxCheckbutton.place(x=10, y=290)
-        # there's no Kindle Previewer for Linux
-        if islinux:
-            self.kfx = BooleanVar(None)
-            kfxCheckbutton.config(state=DISABLED)
-
-        # Generate thumbnails check button
-        self.thumbnail = BooleanVar(None)
-        if 'thumbnail' in prefs and cover_def:
-            self.thumbnail.set(prefs['thumbnail'])
-        thumbnailCheckbutton = Checkbutton(self, text="Generate thumbnail", variable=self.thumbnail)
-        thumbnailCheckbutton.place(x=10, y=310)
-
-        # thumbnail width
-        self.thumbnail_height = IntVar(None)
-        if 'thumbnail_height' in prefs:
-            self.thumbnail_height.set(prefs['thumbnail_height'])
-        else:
-            self.thumbnail_height.set(330)
-        thumbnail_heightEntry = Entry(self, textvariable=self.thumbnail_height)
-        thumbnail_heightEntry.place(x=155, y=310, width=30)
-        # thumbnail width label
-        thumbnail_heightLabel = Label(self, text="px")
-        thumbnail_heightLabel.place(x=185, y=310)
-
-        # disable cover thumbnail controls, if cover wasn't found
-        if not cover_def:
-            thumbnailCheckbutton.config(state=DISABLED)
-            thumbnail_heightEntry.config(state=DISABLED)
-            thumbnail_heightLabel.config(state=DISABLED)
-
-        # output dir label
-        mobi_dirLabel = Label(self, text="Output dir: ")
-        mobi_dirLabel.place(x=10, y=330)
-        # output dir text box
-        self.mobi_dir = StringVar(None)
-        if 'mobi_dir' in prefs:
-            self.mobi_dir.set(prefs['mobi_dir'])
-        else:
-            self.mobi_dir.set(GetDesktop())
-        mobi_dirEntry = Entry(self, textvariable=self.mobi_dir)
-        mobi_dirEntry.place(x=80, y=330, width=90)
-        browseButton = Button(self, text="...", command=self.getdir)
-        browseButton.place(x=180, y=330, width=30, height=18)
-
-        # OK and Cancel buttons
-        cancelButton = Button(self, text="Cancel", command=self.cancel)
-        cancelButton.place(x=130, y=360)
-        okButton = Button(self, text="OK", command=self.savevalues)
-        okButton.place(x=10, y=360)
 
 
 # main plugin routine
@@ -649,14 +334,6 @@ def run(bk):
                         #print('Warning: Unsupported CSS property "{}" found.'.format(property.name))
                         pass
 
-    # set Tk parameters for dialog box
-    root = Tk()
-    root.geometry("240x400+300+300")
-    if not isosx:
-        icon_img = PhotoImage(file=os.path.join(bk._w.plugin_dir, bk._w.plugin_name, 'sigil.png'))
-        root.tk.call('wm', 'iconphoto', root._w, icon_img)
-    root.mainloop()
-
     #=================
     # main routine
     #=================
@@ -678,7 +355,7 @@ def run(bk):
     # get debug preference
     debug = prefs.get('debug', False)
 
-    if 'kg_path' in prefs and not Cancel:
+    if 'kg_path' in prefs:
         kg_path = prefs['kg_path']
 
         #----------------------------------
@@ -687,7 +364,7 @@ def run(bk):
         if plugin_warnings != '':
             plugin_warnings = '\n*************************************************************' + plugin_warnings + '\n*************************************************************\n'
             print(plugin_warnings)
-            answer = AskYesNo('Ignore warnings?', 'Do you want to ignore these warnings?')
+            answer = input('Do you want to ignore warnings? (yes/no)')
             if answer == 'no':
                 print('\nPlugin terminated by user.\n\nPlease click OK to close the Plugin Runner window.')
                 return -1
@@ -959,10 +636,7 @@ def run(bk):
         shutil.rmtree(temp_dir)
 
     else:
-        if Cancel:
-            print('\nPlugin terminated by user.')
-        else:
-            print('\nPlugin Warning: Kindlegen path not selected or invalid.\nPlease re-run the plugin and select the Kindlegen binary.')
+        print('\nPlugin Warning: Kindlegen path not selected or invalid.\nPlease re-run the plugin and select the Kindlegen binary.')
 
     print('\nPlease click OK to close the Plugin Runner window.')
 
