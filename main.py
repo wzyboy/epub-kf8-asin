@@ -61,15 +61,25 @@ def convert(epub_path, kf8_path=None, asin=None):
     # ASIN
     if not asin:
         if epub.identifier:
+            logger.info(f'Detected book identifier: {epub.identifier}')
+            # Identifier looks like a normative UUID.
             if epub.identifier.startswith('urn:uuid:'):
                 asin = epub.identifier.split(':')[2]
-            elif re.match(r'[0-9A-Z]{9,}', epub.identifier.upper()):
+            # Identifier looks like a bare UUID.
+            elif re.match(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', epub.identifier.lower()):
                 asin = epub.identifier
-            logger.info(f'Found a resonable ASIN: {asin}')
-        else:
-            # Generate fake ASIN
-            asin = uuid.uuid4()
-            logger.info(f'Generated a fake ASIN: {asin}')
+            # Identifier looks like a genuine ASIN
+            elif re.match(r'^B[0-9A-Z]{9}$', epub.identifier):
+                asin = epub.identifier
+            else:
+                logger.info('NOT using detected book identifier as ASIN')
+
+    if asin:
+        logger.info(f'Using UUID/ASIN: {asin}')
+    else:
+        # Generate fake ASIN
+        asin = str(uuid.uuid4())
+        logger.info(f'Generated a fake ASIN: {asin}')
 
     # Make a temp copy of the book
     temp_dir = tempfile.mkdtemp()
