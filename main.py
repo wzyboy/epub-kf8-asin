@@ -20,7 +20,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
-logger = logging.getLogger(__file__)
+logger = logging.getLogger(os.path.basename(__file__))
 
 
 class EPUB:
@@ -54,8 +54,9 @@ class EPUB:
         return self.opf_soup.find('package')['version']
 
 
-def convert(epub_path, kf8_path=None, asin=None):
+def convert(epub_path, kf8_path=None, asin=None, quiet=False):
 
+    logger.info(f'Processing: {epub_path}')
     epub = EPUB(epub_path)
 
     # ASIN
@@ -89,7 +90,13 @@ def convert(epub_path, kf8_path=None, asin=None):
     # Generate temp .mobi file
     mobi_tmp = os.path.join(temp_dir, f'{asin}.mobi')
     kindlegen_cmd = ['kindlegen', epub_tmp, '-dont_append_source']
-    subprocess.check_call(kindlegen_cmd)
+    logger.info(f'Running: {kindlegen_cmd}')
+    if not quiet:
+        subprocess.check_call(kindlegen_cmd)
+    else:
+        subprocess.check_call(
+            kindlegen_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
     assert os.path.isfile(mobi_tmp)
 
     # Fix metadata of temp .mobi file:
@@ -122,9 +129,10 @@ def main():
     ap.add_argument('epub_path')
     ap.add_argument('-o', '--output', help='KF8 (.azw3) output')
     ap.add_argument('-a', '--asin', help='provide/override ASIN')
+    ap.add_argument('-q', '--quiet', action='store_true', help='suppress kindlegen output')
     args = ap.parse_args()
 
-    convert(args.epub_path, args.output, args.asin)
+    convert(args.epub_path, args.output, args.asin, args.quiet)
 
 
 if __name__ == "__main__":
