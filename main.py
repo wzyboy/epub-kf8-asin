@@ -92,9 +92,9 @@ def convert(epub_path, kf8_path=None, asin=None, quiet=False):
     kindlegen_cmd = ['kindlegen', epub_tmp, '-dont_append_source']
     logger.info(f'Running: {kindlegen_cmd}')
     if not quiet:
-        subprocess.check_call(kindlegen_cmd)
+        subprocess.call(kindlegen_cmd)
     else:
-        subprocess.check_call(
+        subprocess.call(
             kindlegen_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
     assert os.path.isfile(mobi_tmp)
